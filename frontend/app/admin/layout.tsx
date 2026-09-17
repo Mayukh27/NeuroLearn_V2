@@ -1,39 +1,24 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import Sidebar from "@/components/Sidebar"
-import Navbar from "@/components/Navbar"
-import { fetchStudentProfile, type StudentProfile } from "@/lib/api"
+import { ShieldCheck } from "lucide-react"
 
 /**
- * Shell for /admin — identical to every other route's layout.tsx
- * (video, assessment, results, leaderboard, profile, dashboard).
+ * Shell for /admin — deliberately NOT the student Sidebar/Navbar. Admin is
+ * a separate, non-gamified administrative interface: no XP/streak chrome,
+ * no student nav items, and it is never reachable from the student sidebar.
+ * The page itself (page.tsx) still owns the actual key-gate/unlock logic;
+ * this layout only controls the surrounding chrome.
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [student, setStudent] = useState<StudentProfile | null>(null)
-
-  useEffect(() => {
-    fetchStudentProfile().then(setStudent).catch(() => {})
-  }, [])
-
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] flex">
-      <Sidebar
-        xp={student?.xp || 0}
-        xpToNextLevel={student?.xpToNextLevel || 1}
-        level={student?.level || 1}
-        streak={student?.streak || 0}
-      />
-      <div className="flex-1 flex flex-col min-h-screen">
-        <Navbar
-          studentName={student?.name || "Student"}
-          level={student?.level || 1}
-          xp={student?.xp || 0}
-          xpToNextLevel={student?.xpToNextLevel || 1}
-          streak={student?.streak || 0}
-        />
-        <main className="flex-1 overflow-y-auto">{children}</main>
-      </div>
+    <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col">
+      <header className="flex items-center gap-2 h-14 px-6 border-b border-[var(--border-subtle)] shrink-0">
+        <ShieldCheck size={18} className="text-violet-400" />
+        <span className="text-sm font-semibold text-[var(--text-primary)]">
+          NeuroLearn Admin
+        </span>
+      </header>
+      <main className="flex-1 overflow-y-auto">{children}</main>
     </div>
   )
 }

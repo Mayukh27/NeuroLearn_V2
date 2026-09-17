@@ -99,10 +99,30 @@ export default function AdminPage() {
 
   const handleUnlock = async () => {
     if (!keyInput.trim()) return
-    setAdminKey(keyInput.trim())
-    setUnlocked(true)
     setError(null)
-    await refresh()
+    // Stage the candidate key so the authenticated fetch calls below send it,
+    // but do NOT flip `unlocked` (and therefore render admin content) until
+    // the backend has actually accepted it. adminListCourses()/adminListVideos()
+    // are real admin-protected endpoints (require_admin), so a wrong key
+    // surfaces as AdminAuthError here and we stay locked.
+    setAdminKey(keyInput.trim())
+    setLoading(true)
+    try {
+      const [c, v] = await Promise.all([adminListCourses(), adminListVideos()])
+      setCourses(c)
+      setVideos(v)
+      setUnlocked(true)
+    } catch (e) {
+      clearAdminKey()
+      setUnlocked(false)
+      if (e instanceof AdminAuthError) {
+        setError("Invalid admin key.")
+      } else {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleLock = () => {

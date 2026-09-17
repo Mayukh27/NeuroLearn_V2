@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   LayoutDashboard,
-  PlayCircle,
   ClipboardCheck,
   Trophy,
   BarChart3,
@@ -17,7 +16,6 @@ import {
   ChevronRight,
   Flame,
   Star,
-  ShieldCheck,
 } from "lucide-react"
 
 interface SidebarProps {
@@ -27,14 +25,16 @@ interface SidebarProps {
   streak?: number
 }
 
+// "Video Learning" is no longer a standalone student section — course video
+// playback now lives at Dashboard -> click a course. "Admin" is intentionally
+// not part of this menu; the admin area has its own layout/navigation and is
+// never reachable from the student sidebar. See frontend/app/admin/layout.tsx.
 const menuItems = [
   { label: "Dashboard",     icon: LayoutDashboard, href: "/dashboard" },
-  { label: "Video Learning",icon: PlayCircle,       href: "/video"     },
   { label: "Assessment",    icon: ClipboardCheck,   href: "/assessment"},
   { label: "Results",       icon: BarChart3,        href: "/results"   },
   { label: "Leaderboard",   icon: Trophy,           href: "/leaderboard"},
   { label: "Profile",       icon: User,             href: "/profile"   },
-  { label: "Admin",         icon: ShieldCheck,      href: "/admin" },
 ]
 
 export default function Sidebar({ xp = 0, xpToNextLevel = 1, level = 1, streak = 0 }: SidebarProps) {
