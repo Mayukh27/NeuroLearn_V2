@@ -1,0 +1,20 @@
+# Node
+node_modules/
+
+# Python
+__pycache__/.
+__pycache__/
+*.py[cod]
+venv/
+
+# Environment variables
+.env
+
+# Build outputs
+.next/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,98 @@
+# ============================================================
+# NeuroLearn V2 — Local Video Delivery (Phase 3)
+# ============================================================
+# Serves video files directly from disk to LAN clients. FastAPI is never
+# involved in video byte delivery — that is the entire point of this file
+# (see NeuroLearn_V2_Phased_Prompt.md: "Video traffic must NOT pass
+# through FastAPI").
+#
+# THIS IS A TEMPLATE. Do not edit a rendered copy in place — edit this
+# file and re-render with render_config.sh, so VIDEO_STORAGE_DIR/port/CORS
+# always stay in sync with the same backend/.env FastAPI reads.
+#
+# Placeholders (substituted by render_config.sh via envsubst):
+#   ${VIDEO_STORAGE_DIR}  same directory FastAPI validates video paths
+#                         against (config/video_config.py) — the two must
+#                         point at the exact same filesystem location.
+#   ${NGINX_PORT}         LAN port clients hit for video (default 8080).
+#   ${CORS_ORIGIN}        Access-Control-Allow-Origin value. Plain <video
+#                         src=...> playback doesn't require CORS, but it's
+#                         set for forward-compatibility with anything that
+#                         fetches video bytes via JS. "*" is fine here
+#                         since this server is LAN-only and read-only.
+#
+# No hostname is hardcoded ("server_name _;" = accept any Host header) so
+# every one of the ~160 client PCs reaches this by the server's LAN IP —
+# only that IP (documented in backend/.env as NGINX_VIDEO_BASE_URL) needs
+# to be configured, not this file.
+
+server {
+    listen ${NGINX_PORT} default_server;
+    listen [::]:${NGINX_PORT} default_server;
+    server_name _;
+
+    # Local video files only. Read-only, no execution, no proxying.
+    location /media/ {
+        alias ${VIDEO_STORAGE_DIR}/;
+
+        # --- Range-request support (seeking) ---
+        # Nginx serves byte-range requests for static files by default —
+        # this is what makes HTML5 <video> seeking work; no special module
+        # is required. (Optional: if nginx is compiled with
+        # ngx_http_mp4_module and every file served here is strictly .mp4,
+        # uncomment the block below for optimized pseudo-streaming seeks.
+        # Left off by default because this deployment also allows .webm,
+        # which that module does not support.)
+        #
+        #   mp4;
+        #   mp4_buffer_size 1m;
+        #   mp4_max_buffer_size 5m;
+        add_header Accept-Ranges bytes always;
+
+        # --- Read-only enforcement ---
+        limit_except GET HEAD OPTIONS {
+            deny all;
+        }
+        autoindex off;
+        disable_symlinks on;
+
+        # --- CORS (forward-compatible; not required for basic playback) ---
+        add_header Access-Control-Allow-Origin "${CORS_ORIGIN}" always;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Range" always;
+
+        # --- LAN performance for ~160 concurrent clients ---
+        sendfile on;
+        tcp_nopush on;
+        aio threads;
+        output_buffers 2 512k;
+
+        # Videos don't change once placed; safe to let client/proxy caches
+        # hold onto them.
+        add_header Cache-Control "public, max-age=3600";
+
+        # Only serve files with an allowed extension (kept in sync with
+        # backend ALLOWED_VIDEO_EXTENSIONS; update both together). This is
+        # a defense-in-depth backstop, same spirit as the backend's own
+        # extension allow-list — the backend never registers metadata for
+        # anything else, but this stops direct requests to a stray file
+        # too. "if" is used here only for a return, which is the one use
+        # nginx's docs consider safe.
+        # (dotfiles, anything without an allowed extension, etc. are
+        # already excluded by the check above — no separate rule needed)
+        if ($request_filename !~ \.(mp4|webm)$) {
+            return 403;
+        }
+    }
+
+    # Nothing else is served by this vhost.
+    location = /media {
+        return 404;
+    }
+    location / {
+        return 404;
+    }
+
+    access_log /var/log/nginx/neurolearn_video_access.log;
+    error_log  /var/log/nginx/neurolearn_video_error.log;
+}
