@@ -16,6 +16,8 @@ import {
 } from "@/lib/api"
 import { Trophy, Target, Flame, Clock, BookOpen, Zap, CheckCircle2, Circle } from "lucide-react"
 
+const SAVED_AUTO_COURSES_KEY = "neurolearn_saved_auto_courses"
+
 export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [student, setStudent] = useState<StudentProfile | null>(null)
@@ -23,20 +25,40 @@ export default function DashboardPage() {
   const [crsHistory, setCrsHistory] = useState<CrsHistoryEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  function getLocallySavedCourses(): Course[] {
+    if (typeof window === "undefined") return []
+    try {
+      const raw = window.localStorage.getItem(SAVED_AUTO_COURSES_KEY)
+      const parsed = raw ? JSON.parse(raw) : []
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
   useEffect(() => {
     Promise.all([
       fetchCourses(),
       fetchStudentProfile(),
       fetchDailyChallenges(),
-      // CRS history is supplementary and should not prevent the dashboard
-      // from rendering when there is no history yet.
-      fetchCrsHistory(undefined, 10).catch(() => []),
+      // FIX (auth request): this used to hardcode "student_001" directly,
+      // bypassing the real-user default now built into fetchCrsHistory's
+      // signature. Backend enforces student_id === the authenticated
+      // caller anyway (403 otherwise), so passing anything else would
+      // just fail — omit the argument entirely and let it resolve to the
+      // real logged-in user.
+      fetchCrsHistory(undefined, 10).catch(() => []), // isolated: no CRS history yet shouldn't block the dashboard
     ])
       .then(([c, s, ch, crs]) => {
-        // Courses come exclusively from the backend course catalog.
-        // Do not merge browser-local/generated courses into the official
-        // research catalog.
-        setCourses(c)
+        const localSaved = getLocallySavedCourses()
+        const merged = [...c]
+        for (const localCourse of localSaved) {
+          if (!merged.some((course) => course.id === localCourse.id)) {
+            merged.push(localCourse)
+          }
+        }
+
+        setCourses(merged)
         setStudent(s)
         setChallenges(ch)
         setCrsHistory(crs)
@@ -53,9 +75,7 @@ export default function DashboardPage() {
   }
 
   const totalCompleted = courses.filter((c) => c.progress === 100).length
-  const totalWatchHours = student?.totalWatchTime
-    ? Math.floor(student.totalWatchTime / 60)
-    : 0
+  const totalWatchHours = Math.round(courses.reduce((sum, c) => sum + c.estimatedHours * (c.progress / 100), 0))
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-8">
@@ -100,22 +120,11 @@ export default function DashboardPage() {
               {courses.length} courses
             </span>
           </div>
-
-          {courses.length === 0 ? (
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-10 text-center">
-              <BookOpen className="mx-auto mb-3 text-[var(--text-muted)]" size={32} />
-              <h3 className="text-base font-semibold text-[var(--text-primary)]">No courses available</h3>
-              <p className="text-sm text-[var(--text-muted)] mt-1">
-                Courses added by the administrator will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-              {courses.map((course, index) => (
-                <TopicCard key={course.id} course={course} index={index} />
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+            {courses.map((course, index) => (
+              <TopicCard key={course.id} course={course} index={index} />
+            ))}
+          </div>
         </div>
 
         {/* Right Sidebar */}
