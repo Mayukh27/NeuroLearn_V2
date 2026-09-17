@@ -15,6 +15,7 @@ a validated path *relative* to it (see data/models_orm.py::LocalVideo and
 services/video_path_safety.py).
 """
 import os
+import socket
 from pathlib import Path
 
 from loguru import logger
@@ -56,30 +57,57 @@ def get_video_storage_root() -> Path:
     root.mkdir(parents=True, exist_ok=True)
     return root
 
+def get_server_lan_ip() -> str:
+    """Automatically detect the server's LAN IPv4 address.
+
+    The UDP socket is not used to send application data. Connecting it
+    allows the operating system to select the network interface that
+    would be used for outbound traffic, from which we read the local IP.
+    """
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+        finally:
+            sock.close()
+    except OSError:
+        logger.warning(
+            "Could not automatically detect LAN IP; falling back to 127.0.0.1."
+        )
+        return "127.0.0.1"
+
+
+def get_nginx_video_base_url() -> str:
+    """Return the LAN-reachable Nginx video base URL.
+
+    SERVER_LAN_IP in NGINX_VIDEO_BASE_URL is automatically replaced
+    with the server's detected LAN IPv4 address.
+    """
+    base = os.getenv(
+        "NGINX_VIDEO_BASE_URL",
+        "http://SERVER_LAN_IP:18080/media",
+    ).rstrip("/")
+
+    if "SERVER_LAN_IP" in base:
+        base = base.replace("SERVER_LAN_IP", get_server_lan_ip())
+
+    return base
 
 def nginx_url_to_relative_path(url: str) -> str | None:
     """Inverse of get_nginx_video_url(): if `url` is one of our own
     Nginx-served local video URLs, returns the relative path portion;
-    otherwise (a YouTube URL, or anything else) returns None.
-
-    Used by ml/transcription_model.py (Phase 5) to decide whether a
-    video_url can be read directly from VIDEO_STORAGE_DIR instead of
-    downloaded via yt-dlp — the only thing that changes about a video's
-    *source*; caching/locking/Whisper logic is identical either way.
+    otherwise returns None.
     """
-    base = os.getenv("NGINX_VIDEO_BASE_URL", "http://SERVER_LAN_IP:8080/media").rstrip("/")
+    base = get_nginx_video_base_url()
+
     if not url or not url.startswith(base + "/"):
         return None
+
     return url[len(base) + 1:]
 
 
 def get_nginx_video_url(relative_path: str) -> str:
-    """Builds the public, LAN-reachable URL a client uses to play a video
-    — NGINX_VIDEO_BASE_URL (see nginx/render_config.sh, Phase 3) joined
-    with the video's validated relative path. This is the only place a
-    video_links[].url is constructed in V2 — never a YouTube URL, never
-    hand-entered by a student (see routers/courses.py attach-video
-    endpoint, admin-only).
-    """
-    base = os.getenv("NGINX_VIDEO_BASE_URL", "http://SERVER_LAN_IP:8080/media").rstrip("/")
+    """Build the public, LAN-reachable URL a client uses to play a video."""
+    base = get_nginx_video_base_url()
     return f"{base}/{relative_path.lstrip('/')}"

@@ -1,20 +1,62 @@
-# Node
-node_modules/
+# ================================
+# NeuroLearn - Local / Runtime Data
+# ================================
 
-# Python
-__pycache__/.
+# Local course videos
+videos/
+**/videos/
+
+# Runtime logs
+logs/
+**/logs/
+*.log
+*.log.*
+
+# Generated media / uploaded files
+media/
+**/media/
+uploads/
+**/uploads/
+
+# Local databases / database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Python cache
 __pycache__/
+**/__pycache__/
 *.py[cod]
-venv/
 
-# Environment variables
+# Environment files
 .env
+.env.local
+.env.*.local
 
-# Build outputs
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Build / cache directories
 .next/
+node_modules/
 dist/
 build/
+*.pyc
 
-# OS
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# IDE / editor files
+.vscode/
+.idea/
+
+# NGINX runtime logs
+nginx/logs/

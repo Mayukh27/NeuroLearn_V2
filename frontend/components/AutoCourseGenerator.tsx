@@ -17,7 +17,6 @@ import {
 import {
   discoverCourseContent,
   runFullCoursePipeline,
-  saveAutoCourseToDashboard,
   type AutoCourse,
   type DiscoveredVideo,
 } from "@/lib/api"
@@ -25,7 +24,7 @@ import {
 // ── Types ────────────────────────────────────────────────────
 
 type DiscoverResponse = AutoCourse
-const SAVED_AUTO_COURSES_KEY = "neurolearn_saved_auto_courses"
+
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -37,52 +36,6 @@ function formatDuration(seconds: number): string {
   if (h > 0) return `${h}h ${m}m`
   if (m > 0) return `${m}m ${s}s`
   return `${s}s`
-}
-
-function toDashboardCourse(course: AutoCourse) {
-  const videos = (course.videos || []).map((video, idx) => ({
-    id: video.id,
-    title: video.title,
-    url: video.url,
-    duration: video.duration || 0,
-    thumbnail: video.thumbnail || "",
-    order: idx + 1,
-    completed: false,
-    watchedPercent: 0,
-  }))
-
-  const totalSeconds = videos.reduce((sum, v) => sum + (v.duration || 0), 0)
-
-  return {
-    id: course.courseId,
-    title: course.courseTitle,
-    description: course.description,
-    icon: course.icon || "🎓",
-    category: course.category || "Auto-Generated",
-    difficulty: (course.difficulty || "Intermediate") as "Beginner" | "Intermediate" | "Advanced",
-    totalVideos: videos.length,
-    completedVideos: 0,
-    progress: 0,
-    estimatedHours: Math.max(0.1, Number((totalSeconds / 3600).toFixed(1))),
-    tags: course.tags || ["auto-generated"],
-    videoLinks: videos,
-  }
-}
-
-function saveAutoCourseLocally(course: AutoCourse) {
-  if (typeof window === "undefined") return
-
-  const localCourse = toDashboardCourse(course)
-  const raw = window.localStorage.getItem(SAVED_AUTO_COURSES_KEY)
-  const existing = raw ? JSON.parse(raw) : []
-  const filtered = Array.isArray(existing)
-    ? existing.filter((c: { id?: string }) => c?.id !== localCourse.id)
-    : []
-
-  window.localStorage.setItem(
-    SAVED_AUTO_COURSES_KEY,
-    JSON.stringify([localCourse, ...filtered])
-  )
 }
 
 // ── Sub-components ────────────────────────────────────────────
@@ -104,7 +57,7 @@ function VideoCard({ video, index }: { video: DiscoveredVideo; index: number }) 
             alt={video.title}
             className="w-full h-full object-cover"
             onError={(e) => {
-              ;(e.target as HTMLImageElement).style.display = "none"
+              ; (e.target as HTMLImageElement).style.display = "none"
             }}
           />
         ) : (
@@ -175,8 +128,6 @@ export default function AutoCourseGenerator() {
   const [result, setResult] = useState<DiscoverResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [saveLoading, setSaveLoading] = useState(false)
-  const [savedCourseId, setSavedCourseId] = useState<string | null>(null)
   const [runFull, setRunFull] = useState(false)
 
   const EXAMPLE_TOPICS = [
@@ -193,7 +144,6 @@ export default function AutoCourseGenerator() {
     setError(null)
     setNotice(null)
     setResult(null)
-    setSavedCourseId(null)
 
     try {
       if (runFull) {
@@ -223,32 +173,6 @@ export default function AutoCourseGenerator() {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") handleDiscover()
   }
-
-  async function handleSaveCourse() {
-    if (!result?.courseId) return
-    setSaveLoading(true)
-    setError(null)
-
-    try {
-      // Always persist locally so dashboard can show it instantly.
-      saveAutoCourseLocally(result)
-
-      const res = await saveAutoCourseToDashboard(result.courseId)
-      setSavedCourseId(result.courseId)
-      setNotice(res.message || "Course saved to dashboard")
-    } catch (ex: unknown) {
-      const msg = ex instanceof Error ? ex.message : "Could not save course"
-      if (/404/.test(msg)) {
-        setSavedCourseId(result.courseId)
-        setNotice("Saved locally. Restart/redeploy backend to enable server-side save endpoint.")
-      } else {
-        setError(msg)
-      }
-    } finally {
-      setSaveLoading(false)
-    }
-  }
-
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
       {/* Header */}
@@ -419,11 +343,10 @@ export default function AutoCourseGenerator() {
                 </div>
               </div>
               <span
-                className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                  result.status === "success"
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-amber-500/15 text-amber-400"
-                }`}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium ${result.status === "success"
+                  ? "bg-emerald-500/15 text-emerald-400"
+                  : "bg-amber-500/15 text-amber-400"
+                  }`}
               >
                 {result.status}
               </span>
@@ -437,27 +360,12 @@ export default function AutoCourseGenerator() {
             </div>
 
             {/* CTA */}
-            <div className="pt-1 space-y-3">
+            {/* Discovery result — preview only */}
+            <div className="pt-1">
               <p className="text-center text-xs text-[var(--text-muted)]">
                 Course ID: <code className="text-violet-400">{result.courseId}</code>
-                {" · "}Use this to track progress in NeuroLearn.
+                {" · "}Preview only — this generated course is not added to the Dashboard.
               </p>
-
-              <div className="flex justify-center">
-                <button
-                  onClick={handleSaveCourse}
-                  disabled={saveLoading || savedCourseId === result.courseId}
-                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold
-                             bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed
-                             text-white transition-all duration-200"
-                >
-                  {saveLoading
-                    ? "Saving..."
-                    : savedCourseId === result.courseId
-                      ? "Saved to Dashboard"
-                      : "Save to Dashboard"}
-                </button>
-              </div>
             </div>
           </motion.div>
         )}

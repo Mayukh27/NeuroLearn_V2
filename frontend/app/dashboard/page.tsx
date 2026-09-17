@@ -16,8 +16,6 @@ import {
 } from "@/lib/api"
 import { Trophy, Target, Flame, Clock, BookOpen, Zap, CheckCircle2, Circle } from "lucide-react"
 
-const SAVED_AUTO_COURSES_KEY = "neurolearn_saved_auto_courses"
-
 export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [student, setStudent] = useState<StudentProfile | null>(null)
@@ -25,16 +23,6 @@ export default function DashboardPage() {
   const [crsHistory, setCrsHistory] = useState<CrsHistoryEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  function getLocallySavedCourses(): Course[] {
-    if (typeof window === "undefined") return []
-    try {
-      const raw = window.localStorage.getItem(SAVED_AUTO_COURSES_KEY)
-      const parsed = raw ? JSON.parse(raw) : []
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
 
   useEffect(() => {
     Promise.all([
@@ -50,20 +38,15 @@ export default function DashboardPage() {
       fetchCrsHistory(undefined, 10).catch(() => []), // isolated: no CRS history yet shouldn't block the dashboard
     ])
       .then(([c, s, ch, crs]) => {
-        const localSaved = getLocallySavedCourses()
-        const merged = [...c]
-        for (const localCourse of localSaved) {
-          if (!merged.some((course) => course.id === localCourse.id)) {
-            merged.push(localCourse)
-          }
-        }
-
-        setCourses(merged)
+        setCourses(c)
         setStudent(s)
         setChallenges(ch)
         setCrsHistory(crs)
+        setIsLoading(false)
       })
-      .finally(() => setIsLoading(false))
+      .catch(() => {
+        setIsLoading(false)
+      })
   }, [])
 
   if (isLoading) {
@@ -201,11 +184,10 @@ export default function DashboardPage() {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.4 + i * 0.05 }}
                   whileHover={badge.earned ? { scale: 1.15, rotate: 5 } : {}}
-                  className={`relative aspect-square rounded-xl flex items-center justify-center text-xl cursor-pointer transition-all ${
-                    badge.earned
+                  className={`relative aspect-square rounded-xl flex items-center justify-center text-xl cursor-pointer transition-all ${badge.earned
                       ? "bg-gradient-to-br from-violet-500/15 to-purple-500/15 border border-violet-500/30"
                       : "bg-[var(--bg-elevated)] border border-[var(--border-subtle)] opacity-40 grayscale"
-                  }`}
+                    }`}
                   title={badge.name}
                 >
                   {badge.icon}

@@ -34,7 +34,6 @@ import {
 // ── Config ──
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
 const STRICT_MODE = process.env.NEXT_PUBLIC_API_STRICT === "true"
-const SAVED_AUTO_COURSES_KEY = "neurolearn_saved_auto_courses"
 
 // FIX (auth request): every request now carries the logged-in student's
 // JWT, read lazily here to avoid a circular import at module-load time
@@ -130,29 +129,6 @@ export interface QuestionResponseEvent {
 // ── Helpers ──
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-function getLocallySavedCourses(): Course[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = window.localStorage.getItem(SAVED_AUTO_COURSES_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function mergeWithLocalSavedCourses(courses: Course[]): Course[] {
-  const localSaved = getLocallySavedCourses()
-  if (!localSaved.length) return courses
-
-  const merged = [...courses]
-  for (const localCourse of localSaved) {
-    if (!merged.some((course) => course.id === localCourse.id)) {
-      merged.push(localCourse)
-    }
-  }
-  return merged
-}
 
 /**
  * Recursively convert snake_case keys to camelCase.
@@ -324,30 +300,17 @@ export async function awardXP(
 
 /** GET /api/courses */
 export async function fetchCourses(): Promise<Course[]> {
-  const courses = await apiFetch<Course[]>(
-    "/courses",
-    { method: "GET" },
-    async () => {
-      await delay(300)
-      return JSON.parse(JSON.stringify(DUMMY_COURSES))
-    }
+  return apiFetch<Course[]>(
+    "/courses/",
+    { method: "GET" }
   )
-
-  return mergeWithLocalSavedCourses(courses)
 }
 
 /** GET /api/courses/:id */
 export async function fetchCourseById(courseId: string): Promise<Course | null> {
-  return apiFetch<Course>(
+  return apiFetch<Course | null>(
     `/courses/${courseId}`,
-    { method: "GET" },
-    async () => {
-      await delay(200)
-      const localCourse = getLocallySavedCourses().find((c) => c.id === courseId)
-      if (localCourse) return JSON.parse(JSON.stringify(localCourse))
-      const c = DUMMY_COURSES.find((c) => c.id === courseId)
-      return c ? JSON.parse(JSON.stringify(c)) : null
-    }
+    { method: "GET" }
   )
 }
 
@@ -356,18 +319,9 @@ export async function fetchVideoById(
   courseId: string,
   videoId: string
 ): Promise<{ course: Course; video: VideoLink } | null> {
-  return apiFetch(
-    `/courses/${courseId}/videos/${videoId}`,
-    { method: "GET" },
-    async () => {
-      await delay(150)
-      const localCourse = getLocallySavedCourses().find((c) => c.id === courseId)
-      const course = localCourse || DUMMY_COURSES.find((c) => c.id === courseId)
-      if (!course) return null
-      const video = course.videoLinks.find((v) => v.id === videoId)
-      if (!video) return null
-      return { course: JSON.parse(JSON.stringify(course)), video: JSON.parse(JSON.stringify(video)) }
-    }
+  return apiFetch<{ course: Course; video: VideoLink } | null>(
+    `/courses/${courseId}/videos/${videoId}/`,
+    { method: "GET" }
   )
 }
 

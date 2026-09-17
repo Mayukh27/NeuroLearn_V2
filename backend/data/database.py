@@ -35,6 +35,9 @@ from data.models_orm import (
     BehavioralSummary, PrePostResult, GeneratedQuestion, StudyVideoCompletion,
     VideoTranscriptCache, LocalVideo,
 )
+from config.video_config import (
+    get_nginx_video_url,
+)
 
 XP_PER_LEVEL = 100
 EXPERIMENT_VERSION = "full-study-v2-mixed-segments"
@@ -618,15 +621,41 @@ def get_course(course_id: str) -> Optional[dict]:
 
 
 def _course_to_dict(c: Course) -> dict:
-    return {
-        "id": c.id, "title": c.title, "description": c.description,
-        "icon": c.icon, "category": c.category, "difficulty": c.difficulty,
-        "total_videos": c.total_videos, "completed_videos": c.completed_videos,
-        "progress": c.progress, "estimated_hours": c.estimated_hours,
-        "tags": c.tags or [], "video_links": c.video_links or [],
-    }
+    db = _session()
+    try:
+        video_links = []
 
+        for video in c.video_links or []:
+            video_copy = dict(video)
 
+            local_video_id = video_copy.get("local_video_id")
+
+            if local_video_id:
+                local_video = db.get(LocalVideo, local_video_id)
+
+                if local_video:
+                    video_copy["url"] = get_nginx_video_url(
+                        local_video.relative_path
+                    )
+
+            video_links.append(video_copy)
+
+        return {
+            "id": c.id,
+            "title": c.title,
+            "description": c.description,
+            "icon": c.icon,
+            "category": c.category,
+            "difficulty": c.difficulty,
+            "total_videos": c.total_videos,
+            "completed_videos": c.completed_videos,
+            "progress": c.progress,
+            "estimated_hours": c.estimated_hours,
+            "tags": c.tags or [],
+            "video_links": video_links,
+        }
+    finally:
+        db.close()
 # ── Course admin management (V2, Phase 4) ───────────────────
 # All course/video-catalog content in V2 is created and removed through
 # these functions (called only from admin-gated endpoints in
